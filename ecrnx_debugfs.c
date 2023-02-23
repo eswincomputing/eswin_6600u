@@ -139,8 +139,8 @@ static ssize_t ecrnx_dbgfs_stats_read(struct file *file,
                      "\nmsg_tx:%d,%d; data_tx:%d,%d\n",
                      priv->msg_tx, priv->msg_tx_done, priv->data_tx, priv->data_tx_done);
     ret += scnprintf(&buf[ret], bufsz - ret,
-                     "usb_rx:%d, data_rx:%d, msg_rx:%d\n",
-                     priv->usb_rx, priv->data_rx, priv->msg_rx);
+                     "usb_rx:%d, data_rx:%d, data_mgmt:%d, msg_rx:%d rx_pn_drop:%d\n",
+                     priv->usb_rx, priv->data_rx, priv->data_mgmt, priv->msg_rx, priv->rx_pn_drop);
     read = simple_read_from_buffer(user_buf, count, ppos, buf, ret);
 
     kfree(buf);

@@ -143,7 +143,7 @@ static int usb_host_msgack_handler(struct ipc_host_env_tag *env, struct sk_buff 
  * @param {skb} received skb data
  * @return: none
  */
-static int usb_host_dbg_handler(struct ipc_host_env_tag *env, struct sk_buff *skb)
+static int __attribute__((unused)) usb_host_dbg_handler(struct ipc_host_env_tag *env, struct sk_buff *skb)
 {
     // LMAC has triggered an IT saying that a DBG message has been sent to upper layer.
     // Then we first need to check the validity of the current buffer, and the validity
@@ -342,8 +342,9 @@ void usb_host_rx_handler(uint32_t frm_type, struct ipc_host_env_tag *env, struct
 
         case USB_FRM_TYPE_DBG:
         {
-            ecrnx_printk_debugfs("--%s:USB_FRM_TYPE_DBG, len:%d, slave:%s \n", __func__, skb->len, skb->data);
-            ret = usb_host_dbg_handler(env, skb);
+            ecrnx_printk_always("SLAVE------%.*s", skb->len, skb->data);
+            //ret = usb_host_dbg_handler(env, skb);
+            ret = 0;
             break;
         }
         case USB_FRM_TYPE_IWPRIV:

@@ -11,6 +11,7 @@
 #include <linux/ieee80211.h>
 #include <linux/etherdevice.h>
 #include <net/ieee80211_radiotap.h>
+#include <linux/vmalloc.h>
 
 #include "ecrnx_defs.h"
 #include "ecrnx_rx.h"
@@ -439,13 +440,13 @@ static void dump_mgmt_rx(struct hw_rxhdr *hw_rxhdr)
  * If vif is not specified in the rx descriptor, the the frame is uploaded
  * on all active vifs.
  */
+
 static void ecrnx_rx_mgmt_any(struct ecrnx_hw *ecrnx_hw, struct sk_buff *skb,
                              struct hw_rxhdr *hw_rxhdr)
 {
     struct ecrnx_vif *ecrnx_vif = NULL;
     int vif_idx = hw_rxhdr->flags_vif_idx;
     struct ieee80211_mgmt *mgmt_data = (struct ieee80211_mgmt *)skb->data;
-    struct ecrnx_sta *sta = NULL;
 
 	//ECRNX_DBG("%s:%d \n", __func__, __LINE__);
     trace_mgmt_rx(hw_rxhdr->phy_info.phy_prim20_freq, vif_idx,
@@ -464,14 +465,9 @@ static void ecrnx_rx_mgmt_any(struct ecrnx_hw *ecrnx_hw, struct sk_buff *skb,
         ecrnx_vif = ecrnx_rx_get_vif(ecrnx_hw, vif_idx);
         if (ecrnx_vif){
             ecrnx_rx_mgmt(ecrnx_hw, ecrnx_vif, skb, hw_rxhdr);
-        }
-    }
-    if(ecrnx_vif && ecrnx_vif->sta.ap != NULL)
-    {
-        sta = ecrnx_vif->sta.ap;
-        if (memcmp(sta->mac_addr, mgmt_data->bssid, ETH_ALEN) == 0)
-        {
-            sta->rssi = hw_rxhdr->hwvect.rx_vect1.rssi_leg;
+            if (ecrnx_vif->sta.ap != NULL && memcmp(ecrnx_vif->sta.ap->mac_addr, mgmt_data->bssid, ETH_ALEN) == 0){
+                ecrnx_vif->sta.ap->rssi = hw_rxhdr->hwvect.rx_vect1.rssi_leg;
+            }
         }
     }
 
@@ -1141,6 +1137,8 @@ static bool ecrnx_rx_data_pn_check(struct ecrnx_hw *ecrnx_hw, struct sk_buff *sk
         return true;
     }
 
+    ecrnx_hw->rx_pn_drop++;
+
     return false;
 }
 
@@ -1647,7 +1645,6 @@ discard:
 }
 #endif
 
-
 u8 ecrnx_rx_agg_data_ind(struct ecrnx_hw *ecrnx_hw, u16_l status, struct sk_buff* skb, int msdu_offset)
 {
     struct hw_rxhdr *hw_rxhdr = NULL;
@@ -1939,7 +1936,8 @@ u8 ecrnx_rxdataind(void *pthis, void *hostid)
         skb->data += msdu_offset;
 
         //Save frame length
-        frm_len = le32_to_cpu(hw_rxhdr->hwvect.len) - msdu_offset;
+        //frm_len = le32_to_cpu(hw_rxhdr->hwvect.len) - msdu_offset;
+        frm_len = le32_to_cpu(hw_rxhdr->hwvect.len);
 
         // Reserve space for frame
         skb->len = frm_len;
@@ -1952,6 +1950,7 @@ u8 ecrnx_rxdataind(void *pthis, void *hostid)
 
                 //Duplicate the HW Rx Header to override with the radiotap header
                 memcpy(&hw_rxhdr_copy, hw_rxhdr, sizeof(hw_rxhdr_copy));
+                hw_rxhdr = &hw_rxhdr_copy;
 
             } else {
                 //Duplicate the skb and extend the headroom
@@ -1963,7 +1962,7 @@ u8 ecrnx_rxdataind(void *pthis, void *hostid)
         }
         else
         {
-#ifdef CONFIG_ECRNX_MON_DATA
+#if  0
             // Check if MSDU
             if (!hw_rxhdr->flags_is_80211_mpdu) {
                 // MSDU
@@ -1998,8 +1997,8 @@ u8 ecrnx_rxdataind(void *pthis, void *hostid)
             //Reset original skb->data pointer
             skb->data = (void*) hw_rxhdr;
         
-            wiphy_err(ecrnx_hw->wiphy, "RX status %d is invalid when MON_DATA is disabled\n", status);
-            dev_kfree_skb(skb);
+            //wiphy_err(ecrnx_hw->wiphy, "RX status %d is invalid when MON_DATA is disabled\n", status);
+            //dev_kfree_skb(skb);
             goto check_len_update;
 #endif
         }
@@ -2008,12 +2007,11 @@ u8 ecrnx_rxdataind(void *pthis, void *hostid)
         skb->len = 0;
         skb_reset_tail_pointer(skb_monitor);
         skb_monitor->len = 0;
-
         skb_put(skb_monitor, frm_len);
         if (ecrnx_rx_monitor(ecrnx_hw, ecrnx_vif, skb_monitor, hw_rxhdr, rtap_len)){
-                dev_kfree_skb(skb);
+                dev_kfree_skb(skb_monitor);
                 dev_err(ecrnx_hw->dev, "skb monitor handle error \n");
-            }
+        }
 
         if (status == RX_STAT_MONITOR) {
             status |= RX_STAT_ALLOC;
@@ -2082,6 +2080,7 @@ check_len_update:
         if (hw_rxhdr->flags_is_80211_mpdu) {
             //ECRNX_DBG("recv mgmt\n");
             ecrnx_rx_mgmt_any(ecrnx_hw, skb, hw_rxhdr);
+            ecrnx_hw->data_mgmt++;
         } else {
             ecrnx_vif = ecrnx_rx_get_vif(ecrnx_hw, hw_rxhdr->flags_vif_idx);
             //ECRNX_DBG(" flags vif idx1:%d, vif: 0x%x \n", hw_rxhdr->flags_vif_idx, ecrnx_vif);
@@ -2121,7 +2120,7 @@ check_len_update:
                 //printk("sn:%d %d %d %d l:%d\n",orignal_rxu_state->is_qos, orignal_rxu_state->need_reord, orignal_rxu_state->need_pn_check,orignal_rxu_state->sn, skb->len -8);
                 if(orignal_rxu_state->is_qos && orignal_rxu_state->need_reord) {
                     ecrnx_rx_reord_check(ecrnx_hw, ecrnx_vif, hw_rxhdr, skb, orignal_rxu_state);
-                }else if(orignal_rxu_state->is_qos  && !orignal_rxu_state->need_reord) {
+                } else if(orignal_rxu_state->is_qos  && !orignal_rxu_state->need_reord) {
                     ecrnx_rx_reord_tid_flush(ecrnx_hw, ecrnx_vif, skb, hw_rxhdr->flags_sta_idx,orignal_rxu_state->tid);
                     if (orignal_rxu_state->need_pn_check)
                     {
@@ -2158,7 +2157,6 @@ check_len_update:
         }
         goto end;
     }
-
     else if (status & RX_STAT_ALLOC) {
         /*agg frame*/
             
@@ -2179,7 +2177,6 @@ check_len_update:
         }
         //ECRNX_DBG("status set alloc\n");
     }
-
 end:
     if(frg_ctrl_skb){
         dev_kfree_skb(frg_ctrl_skb);

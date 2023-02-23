@@ -60,6 +60,7 @@ unsigned long sdio_rx_error_cnt;
 
 
 struct eswin_sdio * g_sdio;
+struct sdio_func g_func2;
 
 #if SDIO_DEBUG
 static struct eswin_sdio *trS;
@@ -68,6 +69,8 @@ static struct dentry *p_debugfs_sdio;
 static int debugfs_sdio_read(void *data, u64 *val)
 {
 	struct eswin_sdio *tr_sdio = trS;
+	int ret;
+	u8 value;
 
 	int pdata[10];
 
@@ -89,6 +92,13 @@ static int debugfs_sdio_read(void *data, u64 *val)
 	print_hex_dump(KERN_DEBUG, "status - 1 ", DUMP_PREFIX_NONE, 16, 1, pdata, 16, false);
 	sdio_release_host(tr_sdio->func);
 #endif
+	printk("%s,func2 num:%d,card:%x; func1 num:%d,card:%x\n",__func__,
+	            tr_sdio->func2->num,tr_sdio->func2->card,tr_sdio->func->num,tr_sdio->func->card);
+	sdio_claim_host(tr_sdio->func2);
+	value = sdio_f0_readb(tr_sdio->func2, 0x02, &ret);
+	sdio_enable_func(tr_sdio->func2);
+	sdio_release_host(tr_sdio->func2);
+	printk("%s, read value 0 :%d",__func__,value);
 	return 0;
 }
 
@@ -99,8 +109,9 @@ static int debugfs_sdio_write(void *data1, u64 val)
 	char cmd[16] = {1,2,3,4,5,6,7,8,9,1,2,3,4,5,6,7};
 	struct sk_buff * skb;
 	char * p;
+    u8 value;
 
-#if 1	
+#if 1
 	struct eswin_sdio *tr_sdio = trS;
 
 	ecrnx_printk_trans(" %s, tr_sdio->func: %x\n", __func__, g_sdio->func);
@@ -114,6 +125,12 @@ static int debugfs_sdio_write(void *data1, u64 val)
 	}
 
 	sdio_release_host(tr_sdio->func);
+
+	sdio_claim_host(tr_sdio->func2);
+	value = sdio_f0_readb(tr_sdio->func2, 0x02, &ret);
+	sdio_disable_func(tr_sdio->func2);
+	sdio_release_host(tr_sdio->func2);
+	printk("%s, read value 0 :%d",__func__,value);
 #else
 
 	skb = dev_alloc_skb(4096);
@@ -218,10 +235,10 @@ static int sdio_update_status(struct eswin_sdio *tr_sdio)
 	u32 rear;
 	int ac, ret;
     u8 * buf = kmalloc(4,GFP_ATOMIC);
-
-	//ECRNX_PRINT("%s\n", __func__);
+    memset(buf, 0, 4);
+	ecrnx_printk_trans("%s\n", __func__);
 	sdio_claim_host(tr_sdio->func);
-	trS = tr_sdio;
+	//trS = tr_sdio;
     /* replace the sdio_memcpy_fromio with sdio_readsb. in which the op code is 0, the addr will not change during transmittion */
 	ret = sdio_readsb(tr_sdio->func, buf, SDIO_ADDR_INFO_ASYNC, 4);
 	if (ret < 0) {
@@ -549,7 +566,7 @@ static int sdio_xmit(struct eswin *tr, struct tx_buff_pkg_node *node)
 
 static int sdio_start(struct eswin *tr)
 {
-	int ret=0;
+	//int ret=0;
 
 	struct eswin_sdio *tr_sdio   = (struct eswin_sdio *)tr->drv_priv;
 
@@ -559,7 +576,8 @@ static int sdio_start(struct eswin *tr)
 	//if(tr->loopback == 1)
 	//	return 0;
 	tr_sdio->curr_tx_size = 0;
-	ret = sdio_update_status(tr_sdio);
+    trS = tr_sdio;
+	//ret = sdio_update_status(tr_sdio);
 	INIT_DELAYED_WORK(&tr_sdio->work, sdio_poll_status);
 
 	tr_sdio->kthread = kthread_run(sdio_rx_thread, tr_sdio, "sdio-rx");
@@ -569,7 +587,7 @@ static int sdio_start(struct eswin *tr)
 	atomic_set(&tr_sdio->slave_buf_suspend, 0);
     spin_lock_init(&tr_sdio->lock);
 
-	return ret;
+	return 0;
 }
 
 
@@ -590,12 +608,20 @@ static int sdio_raw_write(struct eswin *tr,	const void *data, const u32 len)
 {
 	int ret;
 	struct eswin_sdio *tr_sdio   = (struct eswin_sdio *)tr->drv_priv;
+	u8 * buf = kmalloc(4,GFP_ATOMIC);
 
 	ecrnx_printk_trans(" %s, entry~", __func__);
 
 	sdio_claim_host(tr_sdio->func);
     /* replace the sdio_memcpy_xxio with sdio_xxxxsb. in sdio_xxxxsb the op code is 0, the addr will not change during transmittion */
-	ret = sdio_writesb(tr_sdio->func, SDIO_ADDR_DATA, data,  len);
+	if(*(int *)data == 0x73796e63) {
+		sdio_writesb(tr_sdio->func, 0x8C, data,  len);
+		sdio_readsb(tr_sdio->func, buf, 0x8C, 1);
+		ret = *(int *)buf & 0x000000ff;
+		kfree(buf);
+	} else {
+		ret = sdio_writesb(tr_sdio->func, SDIO_ADDR_DATA, data,  len);
+	}
 	sdio_release_host(tr_sdio->func);
 
 	return ret;
@@ -606,6 +632,7 @@ static int sdio_wait_ack(struct eswin *tr)
 {
 	int data = 0;
     u8 * buf = kmalloc(4,GFP_ATOMIC);
+    memset(buf, 0, 4);
 	struct eswin_sdio *tr_sdio   = (struct eswin_sdio *)tr->drv_priv;
 
 	ecrnx_printk_trans(" %s, entry~", __func__);
@@ -639,75 +666,31 @@ static void eswin_sdio_irq_handler(struct sdio_func *func)
 	u32 rear;	
 	unsigned char lowbyte, highbyte;
 	int ret, ac;
+	u8 pending;
 
 	//printk(" %s, entry~\n", __func__);
 
 	sdio_claim_host(tr_sdio->func);
+	
+	pending = sdio_f0_readb(tr_sdio->func, 0x05, &ret);
+	if (ret) {
+		pr_debug("%s: error %d reading SDIO_CCCR_INTx\n",
+		       __func__, ret);
+		sdio_release_host(tr_sdio->func);
+		return;
+	}
+	if(pending != 2){
+		sdio_release_host(tr_sdio->func);
+		//printk("%s irq is invalid,func num:%d", __func__,tr_sdio->func->num);
+		return;
+	}
+	
 	lowbyte  = sdio_readb(tr_sdio->func, 0x00, &ret);
 	highbyte = sdio_readb(tr_sdio->func, 0x01, &ret);
 	tr_sdio->recv_len  = (highbyte << 8) | lowbyte;
 	//printk("%s %u, %hhu, %hhu!", __func__, tr_sdio->recv_len, highbyte, lowbyte);
 
-#if 0
-	//_info(" eswin_sdio_irq_handler, len: %d\n", tr_sdio->recv_len);
-	if(tr_sdio->recv_len == 1) {
-	
-		ret = sdio_memcpy_fromio(tr_sdio->func, &tr_sdio->sdio_info, SDIO_ADDR_INFO, 0x10 /*priv->recv_len*/);
-		if (ret < 0) {
-			ECRNX_PRINT(" eswin_sdio_irq_handler, info-ret: %d\n", ret);
-			//print_hex_dump(KERN_DEBUG, "status - 2 ", DUMP_PREFIX_NONE, 16, 1, &priv->sdio_info, 32, false);
-			sdio_release_host(tr_sdio->func);
-			return;
-		}
-		//ECRNX_PRINT(" get info\n");
-		//ECRNX_PRINT(" eswin_sdio_irq_handler, info-wr: %#x, info-rd: %#x\n", priv->sdio_info.info_wr, priv->sdio_info.info_rd);
 
-		tr_sdio->slot[TX_SLOT].head = tr_sdio->sdio_info.info_wr;
-		tr_sdio->slot[RX_SLOT].head = tr_sdio->sdio_info.info_rd;
-
-
-		//if (hdev->nw->loopback)
-		//	return;
-
-		if((tr_sdio->sdio_info.credit_vif0 != tr_sdio->credit_vif0) 
-			||(tr_sdio->sdio_info.credit_vif1 != tr_sdio->credit_vif1)){
-			/* Update VIF0 credit */
-			rear = tr_sdio->sdio_info.credit_vif0;
-			tr_sdio->credit_vif0 = rear;
-			for (ac = 0; ac < 4; ac++)
-				tr_sdio->rear[ac] = (rear >> 8*ac) & 0xff;
-
-
-			/* Update VIF1 credit */
-			rear = tr_sdio->sdio_info.credit_vif1;
-			tr_sdio->credit_vif1 = rear;
-			for (ac = 0; ac < 4; ac++)
-				tr_sdio->rear[6+ac] = (rear >> 8*ac) & 0xff;
-
-			//need_credit = 1;
-			//sdio_release_host(tr_sdio->func);
-			//sdio_credit_skb(tr_sdio);
-			//sdio_claim_host(func);
-		}
-#if 0
-	printk("irq: wr: %d, rd: %d, credit:%d/%d, %d/%d, %d/%d, %d/%d\n", 
-			priv->sdio_info.info_wr, priv->sdio_info.info_rd,
-			priv->rear[3], priv->front[3], 
-			priv->rear[2], priv->front[2], 
-			priv->rear[1], priv->front[1], 
-			priv->rear[0], priv->front[0]);
-#endif
-
-#ifdef CONFIG_NRC_HIF_PRINT_FLOW_CONTROL
-		//nrc_dbg(NRC_DBG_HIF, "-%s\n", __func__);
-#endif
-
-	}
-	else
-	{
-		//ECRNX_PRINT(" get data len: %d\n", priv->recv_len);
-	}
-#endif
 	sdio_release_host(tr_sdio->func);
 	wake_up_interruptible(&tr_sdio->wait);
 }
@@ -750,6 +733,23 @@ struct device *eswin_sdio_get_dev(void *plat)
     return tr->dev;
 }
 
+u8 sdio_func_state;
+
+bool sdio_need_fw_download(void)
+{
+    //function 2 state is used for firmware download flag
+    return !(sdio_func_state & 1<<2);
+}
+
+void sdio_reset_func2(void)
+{
+    struct eswin_sdio *tr_sdio = trS;
+    sdio_claim_host(tr_sdio->func2);
+    sdio_enable_func(tr_sdio->func2);
+    sdio_disable_func(tr_sdio->func2);
+    sdio_enable_func(tr_sdio->func2);
+    sdio_release_host(tr_sdio->func2);
+}
 
 static int eswin_sdio_probe(struct sdio_func *func, const struct sdio_device_id *id)
 {
@@ -770,6 +770,18 @@ static int eswin_sdio_probe(struct sdio_func *func, const struct sdio_device_id 
 		g_sdio = tr_sdio;
 		tr_sdio->tr = tr;
 		tr_sdio->func = func;
+		tr_sdio->func2 = &g_func2;
+		//make a fake func2 info, copy from func1, for func2 reset.
+		tr_sdio->func2->card = tr_sdio->func->card;
+		tr_sdio->func2->dev = tr_sdio->func->dev;
+		tr_sdio->func2->class = tr_sdio->func->class;
+
+		tr_sdio->func2->vendor = tr_sdio->func->vendor;
+
+		tr_sdio->func2->device = tr_sdio->func->device;
+		tr_sdio->func2->enable_timeout = tr_sdio->func->enable_timeout;
+		tr_sdio->func2->num = 2;
+
 	} else {
 		g_sdio->func2 = func;
 		
@@ -838,6 +850,11 @@ static int eswin_sdio_probe(struct sdio_func *func, const struct sdio_device_id 
 	sdio_rx_error_cnt = 0;
 #endif
 
+	sdio_claim_host(tr_sdio->func2);
+	sdio_func_state = sdio_f0_readb(tr_sdio->func2, 0x02, &ret);
+	sdio_release_host(tr_sdio->func2);
+	printk("sdio_func_state :%d\r\n",sdio_func_state);
+
 	
 	ret = eswin_core_register(tr);
 	if(ret) {
@@ -865,6 +882,8 @@ static void eswin_sdio_remove(struct sdio_func *func)
     debugfs_remove_recursive(p_debugfs_sdio);
 
     eswin_core_unregister(tr);
+
+    sdio_reset_func2();
 
     sdio_claim_host(func);
     sdio_release_irq(func);

@@ -15,5 +15,6 @@
 
 void eswin_fw_file_download(struct eswin *tr);
 bool eswin_fw_file_chech(struct eswin *tr);
+bool eswin_system_running(struct eswin *tr);
 
 #endif

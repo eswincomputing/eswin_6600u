@@ -901,6 +901,7 @@ static void ecrnx_set_ht_capa(struct ecrnx_hw *ecrnx_hw, struct wiphy *wiphy)
 #endif
 }
 
+/* jira 614, close DCM */
 static void ecrnx_set_he_capa(struct ecrnx_hw *ecrnx_hw, struct wiphy *wiphy)
 {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 20, 0)
@@ -977,15 +978,15 @@ static void ecrnx_set_he_capa(struct ecrnx_hw *ecrnx_hw, struct wiphy *wiphy)
 #endif
     if (ecrnx_hw->mod_params->stbc_on)
         he_cap->he_cap_elem.phy_cap_info[2] |= IEEE80211_HE_PHY_CAP2_STBC_RX_UNDER_80MHZ;
-    he_cap->he_cap_elem.phy_cap_info[3] |= IEEE80211_HE_PHY_CAP3_DCM_MAX_CONST_RX_16_QAM |
+    he_cap->he_cap_elem.phy_cap_info[3] |= /* IEEE80211_HE_PHY_CAP3_DCM_MAX_CONST_RX_16_QAM | */
                                            IEEE80211_HE_PHY_CAP3_RX_HE_MU_PPDU_FROM_NON_AP_STA;
 
     /* ESWIN: sync the he capa with 6600 standalone */
-    if (nss > 1) {
+    /* if (nss > 1) {
         he_cap->he_cap_elem.phy_cap_info[3] |= IEEE80211_HE_PHY_CAP3_DCM_MAX_RX_NSS_2;
     } else {
         he_cap->he_cap_elem.phy_cap_info[3] |= IEEE80211_HE_PHY_CAP3_DCM_MAX_RX_NSS_1;
-    }
+    } */
     if (ecrnx_hw->mod_params->bfmee) {
         he_cap->he_cap_elem.phy_cap_info[4] |= IEEE80211_HE_PHY_CAP4_SU_BEAMFORMEE;
         he_cap->he_cap_elem.phy_cap_info[4] |=
@@ -1004,8 +1005,8 @@ static void ecrnx_set_he_capa(struct ecrnx_hw *ecrnx_hw, struct wiphy *wiphy)
                                            IEEE80211_HE_PHY_CAP6_PPE_THRESHOLD_PRESENT |
                                            IEEE80211_HE_PHY_CAP6_PARTIAL_BANDWIDTH_DL_MUMIMO;
     he_cap->he_cap_elem.phy_cap_info[7] |= IEEE80211_HE_PHY_CAP7_HE_SU_MU_PPDU_4XLTF_AND_08_US_GI;
-    he_cap->he_cap_elem.phy_cap_info[8] |= IEEE80211_HE_PHY_CAP8_20MHZ_IN_40MHZ_HE_PPDU_IN_2G |
-                                           dcm_max_ru;
+    he_cap->he_cap_elem.phy_cap_info[8] |= IEEE80211_HE_PHY_CAP8_20MHZ_IN_40MHZ_HE_PPDU_IN_2G  /*|
+                                           dcm_max_ru */;
     he_cap->he_cap_elem.phy_cap_info[9] |= IEEE80211_HE_PHY_CAP9_RX_FULL_BW_SU_USING_MU_WITH_COMP_SIGB |
                                            IEEE80211_HE_PHY_CAP9_RX_FULL_BW_SU_USING_MU_WITH_NON_COMP_SIGB |
                                            IEEE80211_HE_PHY_CAP9_NOMIMAL_PKT_PADDING_16US;

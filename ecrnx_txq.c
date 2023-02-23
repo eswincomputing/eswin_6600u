@@ -416,7 +416,9 @@ static bool ecrnx_txq_drop_old_traffic(struct ecrnx_txq *txq, struct ecrnx_hw *e
         }
 
         *dropped = true;
-        ecrnx_printk_warn("%s:skb:0x%08x,txq:0x%p, txq_idx:%d, ps_id:%d \n", __func__, skb, txq, txq->idx, txq->ps_id);
+        ecrnx_printk_warn("%s:skb:0x%08x,txq:0x%p, len=%d, txq_idx:%d, ps_active:%d, ps_id:%d, tid:%d, credits:%d\n",
+                    __func__, skb, txq, skb_queue_len(&txq->sk_list), txq->idx, 
+                    txq->sta->ps.active, txq->ps_id, txq->tid, txq->credits);
         ecrnx_txq_drop_skb(txq, skb, ecrnx_hw, false);
         if (txq->sta && txq->sta->ps.active) {
             txq->sta->ps.pkt_ready[txq->ps_id]--;

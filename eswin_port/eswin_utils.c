@@ -135,6 +135,7 @@ void ecrnx_msg_send(struct ecrnx_cmd *cmd, uint16_t len)
     //cmd->a2e_msg->hostid = (u64_l)cmd;
     memcpy(cmd->a2e_msg->hostid, &cmd, sizeof(struct ecrnx_cmd *));
 
+    ecrnx_printk_msg("%s:id:0x%x, did:0x%x, sid:0x%x, hostid:0x%x \n", __func__, cmd->a2e_msg->id, cmd->a2e_msg->dest_id, cmd->a2e_msg->src_id, cmd->a2e_msg->hostid);
     switch (cmd->a2e_msg->id) {
         case MM_BCN_CHANGE_REQ:
             if (param_len >= sizeof(struct mm_bcn_change_req)) {

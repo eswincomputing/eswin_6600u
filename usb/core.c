@@ -1,4 +1,5 @@
 #include <linux/firmware.h>
+#include <linux/vmalloc.h>
 #include "core.h"
 #include "fw.h"
 //#include "debug.h"

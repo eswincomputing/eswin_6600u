@@ -444,7 +444,9 @@ void sdio_host_rx_handler(uint32_t frm_type, struct ipc_host_env_tag *env, struc
 
         case SDIO_FRM_TYPE_DBG:
         {
-            ret = sdio_host_dbg_handler(env, skb);
+            ecrnx_printk_always("SLAVE------%.*s", skb->len, skb->data);
+            ret = 0;
+            //ret = sdio_host_dbg_handler(env, skb);
             break;
         }
 

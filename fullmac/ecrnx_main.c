@@ -530,7 +530,7 @@ void ecrnx_chanctx_unlink(struct ecrnx_vif *vif)
     ctxt = &vif->ecrnx_hw->chanctx_table[vif->ch_index];
 
     if (ctxt->count == 0) {
-        WARN(1, "Chan ctxt ref count is already 0");
+        ecrnx_printk_always("Chan ctxt ref count is already 0. \n");
     } else {
         ctxt->count--;
     }
@@ -989,9 +989,11 @@ u16 ecrnx_select_queue(struct net_device *dev, struct sk_buff *skb,
 static int ecrnx_set_mac_address(struct net_device *dev, void *addr)
 {
     struct sockaddr *sa = addr;
+    struct ecrnx_vif *ecrnx_vif = netdev_priv(dev);
     int ret;
 
     ret = eth_mac_addr(dev, sa);
+    memcpy(ecrnx_vif->wdev.address, dev->dev_addr, 6);
 
     return ret;
 }
@@ -1076,7 +1078,7 @@ static struct wireless_dev *ecrnx_interface_add(struct ecrnx_hw *ecrnx_hw,
     int min_idx, max_idx;
     int vif_idx = -1;
     int i;
-
+    ecrnx_printk_always("%s: LINUX_VERSION_CODE=0x%x type=%d\n", __func__, LINUX_VERSION_CODE, type);
     // Look for an available VIF
     if (type == NL80211_IFTYPE_AP_VLAN) {
         min_idx = NX_VIRT_DEV_MAX;
@@ -1122,7 +1124,14 @@ static struct wireless_dev *ecrnx_interface_add(struct ecrnx_hw *ecrnx_hw,
     vif->wdev.netdev = ndev;
     vif->wdev.iftype = type;
     vif->up = false;
-    vif->ch_index = ECRNX_CH_NOT_SET;
+    if(type == NL80211_IFTYPE_MONITOR)
+    {
+        vif->ch_index = 0;
+    }
+    else
+    {
+        vif->ch_index = ECRNX_CH_NOT_SET;
+    }
     vif->generation = 0;
     memset(&vif->net_stats, 0, sizeof(vif->net_stats));
     memset(vif->rx_pn, 0, TID_MAX * sizeof(uint64_t));
@@ -1287,6 +1296,24 @@ static struct ecrnx_sta *ecrnx_retrieve_sta(struct ecrnx_hw *ecrnx_hw,
  *	wireless_dev, or an ERR_PTR. For P2P device wdevs, the driver must
  *	also set the address member in the wdev.
  */
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0))
+static struct wireless_dev *ecrnx_cfg80211_add_iface(struct wiphy *wiphy,
+                                                    const char *name,
+                                                    enum nl80211_iftype type,
+                                                    u32 *flags,
+                                                    struct vif_params *params)
+{
+    struct ecrnx_hw *ecrnx_hw = wiphy_priv(wiphy);
+    struct wireless_dev *wdev;
+    unsigned char name_assign_type = NET_NAME_UNKNOWN;
+    wdev = ecrnx_interface_add(ecrnx_hw, name, name_assign_type, type, params);
+
+    if (!wdev)
+        return ERR_PTR(-EINVAL);
+
+    return wdev;
+}
+#else
 static struct wireless_dev *ecrnx_cfg80211_add_iface(struct wiphy *wiphy,
                                                     const char *name,
                                                     unsigned char name_assign_type,
@@ -1295,7 +1322,6 @@ static struct wireless_dev *ecrnx_cfg80211_add_iface(struct wiphy *wiphy,
 {
     struct ecrnx_hw *ecrnx_hw = wiphy_priv(wiphy);
     struct wireless_dev *wdev;
-
     wdev = ecrnx_interface_add(ecrnx_hw, name, name_assign_type, type, params);
 
     if (!wdev)
@@ -1303,6 +1329,7 @@ static struct wireless_dev *ecrnx_cfg80211_add_iface(struct wiphy *wiphy,
 
     return wdev;
 }
+#endif
 
 /**
  * @del_virtual_intf: remove the virtual interface
@@ -1346,9 +1373,7 @@ static int ecrnx_cfg80211_change_iface(struct wiphy *wiphy,
                                       enum nl80211_iftype type,
                                       struct vif_params *params)
 {
-#ifndef CONFIG_ECRNX_MON_DATA
     struct ecrnx_hw *ecrnx_hw = wiphy_priv(wiphy);
-#endif
     struct ecrnx_vif *vif = netdev_priv(dev);
 
 
@@ -2431,6 +2456,23 @@ static int ecrnx_cfg80211_set_monitor_channel(struct wiphy *wiphy,
     return 0;
 }
 
+int ecrnx_cfg80211_set_channel(struct wiphy *wiphy,
+				 struct net_device *netdev,
+				 struct ieee80211_channel *chan,
+				 enum nl80211_channel_type channel_type)
+{
+    struct ecrnx_vif *ecrnx_vif = netdev_priv(netdev);
+    struct ecrnx_hw *ecrnx_hw = wiphy_priv(wiphy);
+    struct cfg80211_chan_def chandef;
+    chandef.chan = chan;
+    chandef.width = chnl2bw[channel_type];
+    if (ecrnx_vif->vif_index == ecrnx_hw->monitor_vif)
+    {
+        ecrnx_cfg80211_set_monitor_channel(wiphy, &chandef);
+    }
+    return 0;
+}
+
 /**
  * @probe_client: probe an associated client, must return a cookie that it
  *	later passes to cfg80211_probe_status().
@@ -3407,7 +3449,7 @@ static int ecrnx_fill_station_info(struct ecrnx_sta *sta, struct ecrnx_vif *vif,
             sinfo->rxrate.bw = RATE_INFO_BW_160;
             break;
         default:
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 15, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0)
             sinfo->rxrate.bw = RATE_INFO_BW_HE_RU;
 #else
             sinfo->rxrate.bw = RATE_INFO_BW_160;
@@ -4033,7 +4075,11 @@ static struct cfg80211_ops ecrnx_cfg80211_ops = {
     .start_ap = ecrnx_cfg80211_start_ap,
     .change_beacon = ecrnx_cfg80211_change_beacon,
     .stop_ap = ecrnx_cfg80211_stop_ap,
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 6, 0))
+    .set_channel = ecrnx_cfg80211_set_channel,
+#else
     .set_monitor_channel = ecrnx_cfg80211_set_monitor_channel,
+#endif
     .probe_client = ecrnx_cfg80211_probe_client,
     .set_wiphy_params = ecrnx_cfg80211_set_wiphy_params,
     .set_txq_params = ecrnx_cfg80211_set_txq_params,
@@ -4217,10 +4263,12 @@ int ecrnx_cfg80211_init(void *ecrnx_plat, void **platform_data)
         ecrnx_amt_config_msg_send();     
     }
 
+#ifdef CONFIG_ECRNX_DBG
     if ((ret = ecrnx_parse_configfile(ecrnx_hw, ECRNX_CONFIG_FW_NAME,&mac_flag))) {
         wiphy_err(wiphy, "ecrnx_parse_configfile failed\n");
         goto err_config;
     }
+#endif
 
     ecrnx_hw->vif_started = 0;
     ecrnx_hw->monitor_vif = ECRNX_INVALID_VIF;
@@ -4379,13 +4427,16 @@ int ecrnx_cfg80211_init(void *ecrnx_plat, void **platform_data)
     skb_queue_head_init(&ecrnx_hw->defer_rx.sk_list);
     /* Update regulatory (if needed) and set channel parameters to firmware
        (must be done after WiPHY registration) */
+#if defined(CONFIG_ECRNX_DBG)
     ecrnx_fw_log_level_set((u32)ecrnx_hw->conf_param.fw_log_level, (u32)ecrnx_hw->conf_param.fw_log_type);
+#endif
     ecrnx_custregd(ecrnx_hw, wiphy);
     ecrnx_send_me_chan_config_req(ecrnx_hw);
 
     /* config gain delta */
     ecrnx_send_set_gain_delta_req(ecrnx_hw);
-
+    /* config  mac addr*/
+    ecrnx_send_set_macaddr_req(ecrnx_hw, wiphy->perm_addr);
 #ifdef CONFIG_ECRNX_DEBUGFS
     if ((ret = ecrnx_dbgfs_register(ecrnx_hw, "ecrnx"))) {
 		ecrnx_printk_err(" ecrnx_dbgfs_register error \n");
@@ -4465,7 +4516,6 @@ void ecrnx_cfg80211_deinit(struct ecrnx_hw *ecrnx_hw)
     }
     ecrnx_radar_detection_deinit(&ecrnx_hw->radar);
     ecrnx_platform_off(ecrnx_hw, NULL);
-    kmem_cache_destroy(ecrnx_hw->sw_txhdr_cache);
 }
 
 /**

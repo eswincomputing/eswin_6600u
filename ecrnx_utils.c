@@ -152,6 +152,9 @@ void dump_cmd_mgr_queue(struct ecrnx_cmd_mgr *cmd_mgr);
 void ecrnx_ipc_msg_push(struct ecrnx_hw *ecrnx_hw, void *msg_buf, uint16_t len)
 {
     ecrnx_hw->msg_tx++;
+    struct ecrnx_cmd *cmd = (struct ecrnx_cmd *)msg_buf;
+    ecrnx_printk_msg("%s:msg_tx:%d, id:0x%x, reqid:0x%x, flags:0x%x, hostid:%p \n", __func__, ecrnx_hw->msg_tx, cmd->id, cmd->reqid, cmd->flags, ecrnx_hw->ipc_env->msga2e_hostid);
+
     if (ecrnx_hw->ipc_env->msga2e_hostid) {
         dump_cmd_mgr_queue(&ecrnx_hw->cmd_mgr);
     }
@@ -446,7 +449,9 @@ void ecrnx_ipc_deinit(struct ecrnx_hw *ecrnx_hw)
     ecrnx_rx_reord_deinit(ecrnx_hw);
     ecrnx_release_list(ecrnx_hw, true);
 
-#ifdef CONFIG_ECRNX_ESWIN_SDIO
+    if(ecrnx_hw->sw_txhdr_cache)
+        kmem_cache_destroy(ecrnx_hw->sw_txhdr_cache);
+
     if (ecrnx_hw->ipc_env->shared) {
         kfree(ecrnx_hw->ipc_env->shared);
         ecrnx_hw->ipc_env->shared = NULL;
@@ -455,18 +460,6 @@ void ecrnx_ipc_deinit(struct ecrnx_hw *ecrnx_hw)
         kfree(ecrnx_hw->ipc_env);
         ecrnx_hw->ipc_env = NULL;
     }
-    ecrnx_sdio_deinit(ecrnx_hw);
-#elif defined(CONFIG_ECRNX_ESWIN_USB)
-    if (ecrnx_hw->ipc_env->shared) {
-        kfree(ecrnx_hw->ipc_env->shared);
-        ecrnx_hw->ipc_env->shared = NULL;
-    }
-    if (ecrnx_hw->ipc_env) {
-        kfree(ecrnx_hw->ipc_env);
-        ecrnx_hw->ipc_env = NULL;
-    }
-    ecrnx_usb_deinit(ecrnx_hw);
-#endif
 
 }
 

@@ -152,4 +152,6 @@ int ecrnx_send_dbg_get_sys_stat_req(struct ecrnx_hw *ecrnx_hw,
 int ecrnx_send_cfg_rssi_req(struct ecrnx_hw *ecrnx_hw, u8 vif_index, int rssi_thold, u32 rssi_hyst);
 int ecrnx_send_set_gain_delta_req(struct ecrnx_hw *ecrnx_hw);
 int ecrnx_send_cal_result_get_req(struct ecrnx_hw *ecrnx_hw, void *cfm);
+int ecrnx_send_set_macaddr_req(struct ecrnx_hw *ecrnx_hw, u8_l *addr);
+
 #endif /* _ECRNX_MSG_TX_H_ */

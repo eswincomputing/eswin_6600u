@@ -101,7 +101,7 @@ char eswin_fw_file_download(struct eswin *tr)
 	struct sk_buff *skb;
 	//char str_msg[16];
     char str_sync[4] = {0x63,0x6e,0x79,0x73};
-	unsigned int file_load_addr[3] = {0x20000U, 0x40000U, 0x50050U};  // ilm addr(start addr); dlm addr; iram0 addr
+	unsigned int file_load_addr[3] = {0x20000U, 0x40000U, 0x500A0U};  // ilm addr(start addr); dlm addr; iram0 addr
 
 	struct cfg_msg * p_msg;
 	struct cfg_sync * p_sync;

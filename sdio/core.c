@@ -308,15 +308,17 @@ void eswin_sdio_register_rx_cb(struct eswin *tr, sdio_rx_cb_t cb)
 
 extern int ecrnx_data_cfm_callback(void *priv, void *host_id);
 extern int ecrnx_msg_cfm_callback(void *priv, void *host_id);
+extern bool sdio_need_fw_download(void);
+
 static void eswin_core_register_work(struct work_struct *work)
 {
 	//struct sk_buff *skb_resp;
 	int ret;
 	struct eswin *tr = container_of(work, struct eswin, register_work.work);
 
-	ecrnx_printk_always(" %s entry, dl_fw = %d!!", __func__, dl_fw);
+	ecrnx_printk_always(" %s entry, dl_fw = %d ,sdio_func_state %d!!", __func__, dl_fw, sdio_need_fw_download());
 
-	if (dl_fw  && eswin_fw_file_chech(tr)) {
+	if (dl_fw && eswin_fw_file_chech(tr) && eswin_system_running(tr)) {
 		eswin_fw_file_download(tr);
 #ifdef CONFIG_CUSTOM_FIRMWARE_DOWNLOAD
         eswin_fw_release(tr->fw);
@@ -326,8 +328,10 @@ static void eswin_core_register_work(struct work_struct *work)
 #endif
 #endif
 		dl_fw = false;
-		schedule_delayed_work(&tr->register_work, msecs_to_jiffies(1000));
-		return;
+
+		//schedule_delayed_work(&tr->register_work, msecs_to_jiffies(1000));
+		//return;
+		msleep(500);
 	}
 
 #ifdef CONFIG_ECRNX_WIFO_CAIL

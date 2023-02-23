@@ -388,7 +388,10 @@ enum mm_msg_tag
     MM_GET_CAL_RESULT_REQ,
     /// Calibration result get Confirmation.
     MM_GET_CAL_RESULT_CFM,
-
+    /// set mac addr Request.
+    MM_SET_MACADRR_REQ,
+    /// set mac addr Confirmation.
+    MM_SET_MACADRR_CFM,
     /*
      * Section of internal MM messages. No MM API messages should be defined below this point
      */
@@ -1315,6 +1318,11 @@ struct mm_mu_group_update_req
         /// User position
         u8_l user_pos;
     } groups[0];
+};
+
+struct mm_set_macddr_req
+{
+     struct mac_addr addr;
 };
 
 ///////////////////////////////////////////////////////////////////////////////

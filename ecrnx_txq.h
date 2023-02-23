@@ -80,9 +80,9 @@
 #endif
 
 /* stop netdev queue when number of queued buffers if greater than this  */
-#define ECRNX_NDEV_FLOW_CTRL_STOP    200
+#define ECRNX_NDEV_FLOW_CTRL_STOP    128
 /* restart netdev queue when number of queued buffers is lower than this */
-#define ECRNX_NDEV_FLOW_CTRL_RESTART 100
+#define ECRNX_NDEV_FLOW_CTRL_RESTART 64
 
 #define TXQ_INACTIVE 0xffff
 #if (NX_NB_TXQ >= TXQ_INACTIVE)
@@ -91,8 +91,8 @@
 
 #define NX_TXQ_INITIAL_CREDITS 20 //4
 
-#define ECRNX_TXQ_CLEANUP_INTERVAL (10 * HZ) //10s in jiffies
-#define ECRNX_TXQ_MAX_QUEUE_JIFFIES (20 * HZ)
+#define ECRNX_TXQ_CLEANUP_INTERVAL (30 * HZ) //10s in jiffies
+#define ECRNX_TXQ_MAX_QUEUE_JIFFIES (60 * HZ)
 /**
  * TXQ tid sorted by decreasing priority
  */

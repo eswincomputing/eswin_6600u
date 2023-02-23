@@ -85,7 +85,12 @@ enum
 
 #define ECRNX_PRINTK_ALL ((u32)(-1))
 #define ECRNX_PRINTK_CLEAR		(0)
-#define ecrnx_printk(_level,fmt,arg...) 	do {if(ecrnx_printk_mask&(_level)) printk(KERN_ERR "%s" fmt,ecrnx_log,##arg);}while(0)
+
+#ifdef CONFIG_ECRNX_DBG
+#define ecrnx_printk(_level,fmt,arg...)     do {if(ecrnx_printk_mask&(_level)) printk(KERN_ERR "%s" fmt,ecrnx_log,##arg);}while(0)
+#else
+#define ecrnx_printk(_level,fmt,arg...)     do {} while(0)
+#endif
 
 /*
 *ecrnx printk
@@ -113,7 +118,12 @@ enum
 #define ecrnx_printk_fw_dl(...)	    ecrnx_printk(ECRNX_PRINTK_MASK_FW_DOWNLOAD,__VA_ARGS__)
 #define ecrnx_printk_amt(...)	    ecrnx_printk(ECRNX_PRINTK_MASK_AMT,__VA_ARGS__)
 #define ecrnx_printk_debug(...)		ecrnx_printk(ECRNX_PRINTK_MASK_DEBUG,__VA_ARGS__)
-#define ecrnx_printk_always(fmt,arg...)		printk(KERN_ERR "%s" fmt,ecrnx_log,##arg)
+
+#ifdef CONFIG_ECRNX_DBG
+#define ecrnx_printk_always(fmt,arg...)     printk(KERN_ERR "%s" fmt,ecrnx_log,##arg)
+#else
+#define ecrnx_printk_always(fmt,arg...)     do {} while(0)
+#endif
 
 extern u32 ecrnx_printk_mask;
 extern const char *ecrnx_log;

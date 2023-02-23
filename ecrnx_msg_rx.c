@@ -606,7 +606,7 @@ static inline int ecrnx_ieee80211_mgmt_to_network(struct ecrnx_hw *ecrnx_hw, str
        return -1;
    }
 
-   new_network = kzalloc(sizeof(struct wlan_network), GFP_KERNEL);
+   new_network = kzalloc(sizeof(struct wlan_network), in_atomic()? GFP_ATOMIC:GFP_KERNEL);
    if(!new_network)
    {
         return -2;

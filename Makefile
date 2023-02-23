@@ -1,4 +1,4 @@
-ECRNX_VERS_NUM=ECR6600U_V1.1.0B03P06
+ECRNX_VERS_NUM=ECR6600U_V1.1.0B05P06
 
 # config_ceva_rtos = y use ceva rtos and add task_cli id
 # config_ceva_rtos = n use freertos and no task_cli id
@@ -156,13 +156,15 @@ else ifeq ($(CONFIG_PLATFORM_AML_T963), y)
 else
 	$(MAKE) -C $(KERNELDIR) O=$(KBUILDDIR) M=$(DRIVER_PATH) $@
 endif
-	@rm -rf *.o
-	@rm -rf *.mod *.mod.c
+	@find -iname "*.o" -o -iname "*.cmd" -o -iname "Module.symvers" | xargs rm -rf
+	@find -iname "*.mod" -o -iname "*.mod.c" -o -iname "modules.order" | xargs rm -rf
 
 copy:
 	cp -f $(DRIVER_PATH)/fullmac/$(ECRNX_MODULE_NAME).ko $(MODDESTDIR)
 
 strip:
+	@rm -rf *.o
+	@rm -rf *.mod *.mod.c
 	@$(CROSS_COMPILE)strip --strip-unneeded $(ECRNX_MODULE_NAME).ko
 clean:
 	rm -rf *.o

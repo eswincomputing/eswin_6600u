@@ -48,6 +48,7 @@ static const char *ecrnx_find_tag(const u8 *file_data, unsigned int file_size,
     return NULL;
 }
 
+#ifdef CONFIG_ECRNX_DBG
 /**
  * Parse the Config file used at init time
  */
@@ -73,9 +74,9 @@ int ecrnx_parse_configfile(struct ecrnx_hw *ecrnx_hw, const char *filename,bool 
     ecrnx_printk_always("cfg path:%s\n",config_path);
     if (eswin_fw_isFileReadable(config_path, NULL) == false)
     {
-        ecrnx_printk_err("%s acquire cfg from file:%s\n", __func__, config_path);
+        ecrnx_printk_warn("%s cfg file not exist:%s\n", __func__, config_path);
         kfree(config_path);
-        return -1;
+        return 0;
     }
 
     eswin_fw_alloc(&config_fw);
@@ -176,9 +177,9 @@ int ecrnx_parse_configfile(struct ecrnx_hw *ecrnx_hw, const char *filename,bool 
     if(0 == ecrnx_hw->conf_param.fw_log_type){
         ecrnx_printk_always("firmware log level type:%d (print to chip's uart) \n", ecrnx_hw->conf_param.fw_log_type);
     }else if(1 == ecrnx_hw->conf_param.fw_log_type){
-        ecrnx_printk_always("firmware log level type:%d (print to host debugfs) \n", ecrnx_hw->conf_param.fw_log_type);
+        ecrnx_printk_always("firmware log level type:%d (print to host ) \n", ecrnx_hw->conf_param.fw_log_type);
     }else if(2 == ecrnx_hw->conf_param.fw_log_type){
-        ecrnx_printk_always("firmware log level type:%d (print to host kernel) \n", ecrnx_hw->conf_param.fw_log_type);
+        ecrnx_printk_always("firmware log level type:%d (both print to host and chip's uart) \n", ecrnx_hw->conf_param.fw_log_type);
     }else{
         ecrnx_printk_err("firmware log level type error;\n");
     }
@@ -374,7 +375,7 @@ int ecrnx_parse_phy_configfile(struct ecrnx_hw *ecrnx_hw, const char *filename,
 
     return 0;
 }
-
+#endif
 
 struct ecrnx_amt_conf_file amt_conf_param;
 int ecrnx_parse_amt_configfile(struct device *dev, const char *filename)

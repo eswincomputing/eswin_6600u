@@ -251,9 +251,13 @@ enum {
 #endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 12, 0)
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0))
+#define ecrnx_cfg80211_add_iface(wiphy, name, type, flag, params) \
+    ecrnx_cfg80211_add_iface(wiphy, name, type, flag, params)
+#else
 #define ecrnx_cfg80211_add_iface(wiphy, name, name_assign_type, type, params) \
     ecrnx_cfg80211_add_iface(wiphy, name, name_assign_type, type, u32 *flags, params)
-
+#endif
 #define ecrnx_cfg80211_change_iface(wiphy, dev, type, params) \
     ecrnx_cfg80211_change_iface(wiphy, dev, type, u32 *flags, params)
 

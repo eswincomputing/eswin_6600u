@@ -14,7 +14,7 @@
 #include <linux/kthread.h>
 #include <linux/gpio.h>
 #include <linux/timer.h>
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)
 #include <uapi/linux/sched/types.h>
 #endif
 //#include <linux/usb.h>
@@ -154,7 +154,7 @@ static void usb_transmit_complete(struct urb *urb)
 	struct txdesc_api *tx_desc;
 	u32_l flag = 0;
 
-	//ECRNX_DBG(" %s entry, dir: %d!!", __func__, pipe->dir);
+	ecrnx_printk_trans("%s, urb:0x%x, skb:0x%x, dir:%d; \n", __func__, urb, urb_context->skb, pipe->dir);
 
 	if (urb->status != 0) {
         pipe->err_count++;
@@ -374,73 +374,28 @@ cleanup_recv_urb:
 	usb_cleanup_recv_urb(urb_context);
 }
 
-#ifdef CONFIG_ECRNX_TASKLET
-static void usb_tx_comp_tasklet(unsigned long data)
-{
-	struct usb_infac_pipe *pipe = (struct usb_infac_pipe *)data;
-	struct sk_buff *skb;
-	struct txdesc_api *tx_desc;
-	u32_l flag = 0;
-	ptr_addr host_id;
-
-	while ((skb = skb_dequeue(&pipe->io_comp_queue))) {
-		//ECRNX_DBG(" %s skb dequeue, skb:0x%08x, skb len: %d!!", __func__, skb, skb->len);
-
-		flag = *(u32_l *)skb->data;
-		if((u8_l)(flag & FLAG_MSG_TYPE_MASK) != TX_FLAG_TX_DESC)
-		{
-			dev_kfree_skb(skb);
-			continue;
-		}
-		tx_desc = (struct txdesc_api *)((u32_l *)skb->data + 1);
-		if (g_usb->p_eswin->data_cfm_callback && ((u8_l)(flag & FLAG_MSG_TYPE_MASK) == TX_FLAG_TX_DESC) && !(tx_desc->host.flags & TXU_CNTRL_MGMT))
-		{
-			memcpy(&host_id, tx_desc->host.packet_addr, sizeof(ptr_addr));
-			g_usb->p_eswin->data_cfm_callback(g_usb->p_eswin->umac_priv, (void*)host_id);
-		}
-	}
-}
-#endif
-
 #ifdef CONFIG_ECRNX_WORKQUEUE
 static void usb_tx_comp_work(struct work_struct *work)
+#elif defined(CONFIG_ECRNX_TASKLET)
+static void usb_tx_comp_work(unsigned long data)
+#elif defined(CONFIG_ECRNX_KTHREAD)
+static void usb_tx_comp_work(struct usb_infac_pipe* infac_pipe)
+#endif
 {
-    struct usb_infac_pipe *pipe = container_of(work,
-                                               struct usb_infac_pipe,
-                                               io_complete_work);
-    struct sk_buff *skb;
-    struct txdesc_api *tx_desc;
-    u32_l flag = 0;
-    ptr_addr host_id;
-
-    while ((skb = skb_dequeue(&pipe->io_comp_queue))) {
-        //ECRNX_DBG(" %s skb dequeue, skb:0x%08x, skb len: %d!!", __func__, skb, skb->len);
-
-        flag = *(u32_l *)skb->data;
-        if((u8_l)(flag & FLAG_MSG_TYPE_MASK) != TX_FLAG_TX_DESC)
-        {
-            dev_kfree_skb(skb);
-            continue;
-        }
-        tx_desc = (struct txdesc_api *)((u32_l *)skb->data + 1);
-        if (g_usb->p_eswin->data_cfm_callback && ((u8_l)(flag & FLAG_MSG_TYPE_MASK) == TX_FLAG_TX_DESC) && !(tx_desc->host.flags & TXU_CNTRL_MGMT))
-        {
-            memcpy(&host_id, tx_desc->host.packet_addr, sizeof(ptr_addr));
-            g_usb->p_eswin->data_cfm_callback(g_usb->p_eswin->umac_priv, (void*)host_id);
-        }
-    }
-}
+    struct usb_infac_pipe *pipe = NULL;
+#ifdef CONFIG_ECRNX_WORKQUEUE
+    pipe = container_of(work, struct usb_infac_pipe, io_complete_work);
+#elif defined(CONFIG_ECRNX_TASKLET)
+    pipe = (struct usb_infac_pipe *)data;
+#elif defined(CONFIG_ECRNX_KTHREAD)
+    pipe = infac_pipe;
 #endif
 
-#ifdef CONFIG_ECRNX_KTHREAD
-void usb_tx_comp_cb(struct sk_buff_head *queue)
-{
     struct sk_buff *skb;
     struct txdesc_api *tx_desc;
     u32_l flag = 0;
-    ptr_addr host_id;
 
-    while ((skb = skb_dequeue(queue))) {
+    while ((skb = skb_dequeue(&pipe->io_comp_queue))) {
         //ECRNX_DBG(" %s skb dequeue, skb:0x%08x, skb len: %d!!", __func__, skb, skb->len);
 
         flag = *(u32_l *)skb->data;
@@ -452,32 +407,50 @@ void usb_tx_comp_cb(struct sk_buff_head *queue)
         tx_desc = (struct txdesc_api *)((u32_l *)skb->data + 1);
         if (g_usb->p_eswin->data_cfm_callback && ((u8_l)(flag & FLAG_MSG_TYPE_MASK) == TX_FLAG_TX_DESC) && !(tx_desc->host.flags & TXU_CNTRL_MGMT))
         {
+#if (__SIZEOF_POINTER__ == 8)
+            ptr_addr host_id;
             memcpy(&host_id, tx_desc->host.packet_addr, sizeof(ptr_addr));
             g_usb->p_eswin->data_cfm_callback(g_usb->p_eswin->umac_priv, (void*)host_id);
+#else
+            g_usb->p_eswin->data_cfm_callback(g_usb->p_eswin->umac_priv, (void*)(*(u32_l*)(tx_desc->host.packet_addr)));
+#endif
         }
     }
 }
 
-void usb_rx_comp_cb(struct usb_infac_pipe *pipe)
+#ifdef CONFIG_ECRNX_WORKQUEUE
+static void usb_rx_comp_work(struct work_struct *work)
+#elif defined(CONFIG_ECRNX_TASKLET)
+static void usb_rx_comp_work(unsigned long data)
+#elif defined(CONFIG_ECRNX_KTHREAD)
+static void usb_rx_comp_work(struct usb_infac_pipe* infac_pipe)
+#endif
 {
+   struct usb_infac_pipe *pipe = NULL;
+#ifdef CONFIG_ECRNX_WORKQUEUE
+    pipe = container_of(work, struct usb_infac_pipe, io_complete_work);
+#elif defined(CONFIG_ECRNX_TASKLET)
+    pipe = (struct usb_infac_pipe *)data;
+#elif defined(CONFIG_ECRNX_KTHREAD)
+    pipe = infac_pipe;
+#endif
+
     struct sk_buff *skb;
+
     while ((skb = skb_dequeue(&pipe->io_comp_queue))) {
-        if (g_usb->p_eswin->rx_callback)
-		{
-			g_usb->p_eswin->rx_callback(g_usb->p_eswin->umac_priv, skb, usb_pipeendpoint(pipe->usb_pipe_handle));
-		}
-        else
-        {
-            if (skb)
-			{ // free the skb
+        if (g_usb->p_eswin->rx_callback) {
+            g_usb->p_eswin->rx_callback(g_usb->p_eswin->umac_priv, skb, usb_pipeendpoint(pipe->usb_pipe_handle));
+        }
+        else {
+            if (skb) { // free the skb
                 ecrnx_printk_trans("%s, skb free: 0x%x !! \n",__func__);
                 dev_kfree_skb(skb);
             }
-
         }
     }
 }
 
+#ifdef CONFIG_ECRNX_KTHREAD
 static int eswin_tx_comp_thread(void *data)
 {
     struct eswin_usb * p_usb = (struct eswin_usb *)data;
@@ -505,8 +478,9 @@ static int eswin_tx_comp_thread(void *data)
         {
             continue;
         }
-        usb_tx_comp_cb(&g_usb->infac_msg.pipe_tx.io_comp_queue);
-        usb_tx_comp_cb(&g_usb->infac_data.pipe_tx.io_comp_queue);
+
+        usb_tx_comp_work(&g_usb->infac_msg.pipe_tx);
+        usb_tx_comp_work(&g_usb->infac_data.pipe_tx);
     }
     ecrnx_printk_trans("tx pkg thread exit\n");
     return 0;
@@ -526,7 +500,6 @@ static int eswin_rx_comp_thread(void *data)
 #endif
     ecrnx_printk_trans("eswin_rx_comp_thread entry\n");
 
-    //ECRNX_DBG(" %s entry, dir: %d!!", __func__, pipe->dir);
     while (!kthread_should_stop())
     {
         ret = wait_event_interruptible(p_usb->wait_rx_comp, skb_queue_len(&g_usb->infac_data.pipe_rx.io_comp_queue) != 0 ||
@@ -541,66 +514,11 @@ static int eswin_rx_comp_thread(void *data)
         {
             continue;
         }
-        usb_rx_comp_cb(&g_usb->infac_msg.pipe_rx);
-        usb_rx_comp_cb(&g_usb->infac_data.pipe_rx);
+        usb_rx_comp_work(&g_usb->infac_msg.pipe_rx);
+        usb_rx_comp_work(&g_usb->infac_data.pipe_rx);
     }
     ecrnx_printk_trans("rx pkg thread exit\n");
     return 0;
-}
-#endif
-
-#ifdef CONFIG_ECRNX_TASKLET
-static void usb_rx_comp_tasklet(unsigned long data)
-{
-	struct usb_infac_pipe *pipe = (struct usb_infac_pipe *)data;
-	struct sk_buff *skb;
-
-	//ECRNX_DBG(" %s entry, dir: %d!!", __func__, pipe->dir);
-
-	while ((skb = skb_dequeue(&pipe->io_comp_queue))) {
-		if (g_usb->p_eswin->rx_callback)
-		{
-			g_usb->p_eswin->rx_callback(g_usb->p_eswin->umac_priv, skb, usb_pipeendpoint(pipe->usb_pipe_handle));
-		}
-        else
-        {
-            if (skb)
-			{ // free the skb
-                ecrnx_printk_trans("%s, skb free: 0x%x !! \n",__func__);
-                dev_kfree_skb(skb);
-            }
-
-        }
-
-	}
-}
-
-#endif
-
-#ifdef CONFIG_ECRNX_WORKQUEUE
-static void usb_rx_comp_work(struct work_struct *work)
-{
-    struct usb_infac_pipe *pipe = container_of(work,
-                                struct usb_infac_pipe,
-                                io_complete_work);
-    struct sk_buff *skb;
-    //ECRNX_DBG(" %s entry, dir: %d!!", __func__, pipe->dir);
-
-    while ((skb = skb_dequeue(&pipe->io_comp_queue))) {
-        if (g_usb->p_eswin->rx_callback)
-		{
-			g_usb->p_eswin->rx_callback(g_usb->p_eswin->umac_priv, skb, usb_pipeendpoint(pipe->usb_pipe_handle));
-		}
-        else
-        {
-            if (skb)
-			{ // free the skb
-                ecrnx_printk_trans("%s, skb free: 0x%x !! \n",__func__);
-                dev_kfree_skb(skb);
-            }
-
-        }
-    }
 }
 #endif
 
@@ -779,6 +697,7 @@ int usb_hif_xmit(struct eswin *tr, struct sk_buff *skb)
 	urb_context = usb_alloc_urb_from_pipe(pipe);
 	if (!urb_context) {
 		ret = -ENOMEM;
+		ecrnx_printk_err("no urb_context memory; \n");
 		goto err;
 	}
 	
@@ -787,10 +706,13 @@ int usb_hif_xmit(struct eswin *tr, struct sk_buff *skb)
 	urb = usb_alloc_urb(0, GFP_ATOMIC);
 	if (!urb) {
 		ret = -ENOMEM;
+		ecrnx_printk_err("no urb memory; \n");
 		goto err_free_urb_to_pipe;
 	}
 
     urb_context->urb = urb;
+
+    ecrnx_printk_trans("%s:%s, urb:0x%x, skb:0x%x; \n", __func__, ((req_type & FLAG_MSG_TYPE_MASK) == TX_FLAG_TX_DESC)?"data":"msg", urb, skb);
 	usb_fill_bulk_urb(urb,
 			  infac_data->udev,
 			  pipe->usb_pipe_handle,
@@ -819,7 +741,7 @@ int usb_hif_xmit(struct eswin *tr, struct sk_buff *skb)
 err_free_urb_to_pipe:
 	usb_free_urb_to_infac(urb_context->pipe, urb_context);
 err:
-	ecrnx_printk_err("usb_hif_xmit, pkg miss due to urb.\n");
+	ecrnx_printk_err("usb_hif_xmit, pkg miss due to urb, ret:%d.\n", ret);
 	skb_queue_tail(&pipe->io_comp_queue, skb);
 	#ifdef CONFIG_ECRNX_KTHREAD
 	wake_up_interruptible(&g_usb->wait_tx_comp);
@@ -902,14 +824,14 @@ static int usb_create_pipe(struct usb_infac_pipe * pipe, int dir, bool flag)
 		INIT_WORK(&pipe->io_complete_work,  usb_tx_comp_work);
 		#endif
 		#ifdef CONFIG_ECRNX_TASKLET
-		tasklet_init(&pipe->tx_tasklet, usb_tx_comp_tasklet, (unsigned long) pipe);
+		tasklet_init(&pipe->tx_tasklet, usb_tx_comp_work, (unsigned long) pipe);
 		#endif
 	} else {
 		#ifdef CONFIG_ECRNX_WORKQUEUE
 		INIT_WORK(&pipe->io_complete_work,  usb_rx_comp_work);
 		#endif
 		#ifdef CONFIG_ECRNX_TASKLET
-		tasklet_init(&pipe->rx_tasklet, usb_rx_comp_tasklet, (unsigned long) pipe);
+		tasklet_init(&pipe->rx_tasklet, usb_rx_comp_work, (unsigned long) pipe);
 		#endif
 	}
 
@@ -963,14 +885,18 @@ static int eswin_usb_probe(struct usb_interface *interface,
      if((usb_status == false) && dl_fw)
      {
         ecrnx_printk_trans("%s entry, reset slave !!", __func__);
-        usb_control_msg(dev,
+        ret = usb_control_msg(dev,
             usb_sndctrlpipe(dev, 0),
             0x2,
             USB_DIR_OUT | USB_TYPE_VENDOR | USB_RECIP_DEVICE,
             0,
             0,
             NULL, 0,10);
-        msleep(200);
+        if(ret == 0)
+        {
+            ecrnx_printk_trans("Wait for slave restart !!");
+            msleep(200);
+        }
      }
 
 	ecrnx_printk_trans("%s entry, func: %d, g_usb: %p !!", __func__, iface_desc->desc.bInterfaceNumber, g_usb);

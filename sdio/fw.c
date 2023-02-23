@@ -36,13 +36,13 @@ void eswin_fw_file_download(struct eswin *tr)
 
 	ecrnx_printk_fw_dl("%s entry!!", __func__);
 
-
+#if 0
 	/* 1 sync */
 	memcpy(skb->data, str_sync, 4);
 	tr->ops->write(tr, skb->data, 4);
 	ret = tr->ops->wait_ack(tr);
 	ecrnx_printk_fw_dl("dl-fw >> sync, ret: %d\n", ret);
-
+#endif
 	
 	dataAddr = tr->fw->data;
 	length_all = tr->fw->size - offset;
@@ -54,7 +54,6 @@ void eswin_fw_file_download(struct eswin *tr)
 		offset+=8; 
 		length_all-=8;
 		ret = kstrtol(length_str, 10, (long*)&lengthLeft);
-		//ECRNX_PRINT("dl-fw >> file len, ret: %d  len:%d\n", ret, lengthLeft);
 		if(ret==0 && lengthLeft)
 		{
 			length_all-=lengthLeft;
@@ -64,7 +63,6 @@ void eswin_fw_file_download(struct eswin *tr)
 			str_cfg[5] = (char)(((file_load_addr[file_num])>>8) & 0xFF);
 			str_cfg[6] = (char)(((file_load_addr[file_num])>>16) & 0xFF);
 			str_cfg[7] = (char)(((file_load_addr[file_num])>>24) & 0xFF);
-			file_num++;
 			str_cfg[8] = (char)((lengthLeft) & 0xFF);
 			str_cfg[9] = (char)(((lengthLeft)>>8) & 0xFF);
 			str_cfg[10] = (char)(((lengthLeft)>>16) & 0xFF);
@@ -74,7 +72,6 @@ void eswin_fw_file_download(struct eswin *tr)
 			memcpy(skb->data, &str_cfg[0], 12);
 			tr->ops->write(tr, skb->data, 12);
 			ret = tr->ops->wait_ack(tr);
-			//ECRNX_PRINT("dl-fw >> cfg, ret: %d\n", ret);
 
 
 			/* 3 load fw */
@@ -84,30 +81,24 @@ void eswin_fw_file_download(struct eswin *tr)
 				{
 					memcpy(skb->data, dataAddr + offset, lengthSend);
 					tr->ops->write(tr, skb->data, lengthSend);
-
-					//ECRNX_PRINT("dl-fw >> ld(%d), ret: %d\n", offset/1024, ret);
-
 					ret = tr->ops->wait_ack(tr);
 				}
 				else
 				{	
 					memcpy(skb->data, dataAddr + offset, lengthSend&0xFFFFFE00U);
 					tr->ops->write(tr, skb->data, lengthSend&0xFFFFFE00U);
-					//ECRNX_PRINT("dl-fw >> ld(%d), ret: %d\n", offset/1024, ret);
 					ret = tr->ops->wait_ack(tr);
 					
 					memcpy(skb->data, dataAddr + offset + (int)(lengthLeft&0xFFFFFE00U), lengthSend&0x1FFU);
 					tr->ops->write(tr, skb->data, lengthSend&0x1FFU);
-					//ECRNX_PRINT("dl-fw >> ld(%d), ret: %d\n", offset/1024, ret);
 					ret = tr->ops->wait_ack(tr);
 				}
 
-				//ECRNX_PRINT("dl-fw >> ld-ack(%d), ret: %d\n", offset/1024, ret);
 				offset += lengthSend;	
 				lengthLeft -= lengthSend;
 			} while(lengthLeft);	
-			//ECRNX_PRINT("dl-fw >> ld, ret: %d\n", ret);
 		}
+		file_num++;
 	}
 
 	/* 4 start up */
@@ -187,5 +178,24 @@ err_fw:
 #endif
     return false;
 }
+
+bool eswin_system_running(struct eswin *tr)
+{
+    int ret;
+    struct sk_buff *skb;
+    char str_sync[4] = {0x63, 0x6E, 0x79, 0x73};
+    skb = dev_alloc_skb(10);
+    memcpy(skb->data, str_sync, 4);
+    ret = tr->ops->write(tr, skb->data, 4);
+
+    printk("eswin_system_running, ret: %d\n", ret);
+    dev_kfree_skb(skb);
+    if(ret == 0)
+    {
+        msleep(100);
+    }
+    return ret;
+}
+
 
 

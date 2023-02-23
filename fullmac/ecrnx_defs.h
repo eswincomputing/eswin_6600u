@@ -661,6 +661,8 @@ struct ecrnx_hw {
     u32 usb_rx;
     u32 msg_rx;
     u32 data_rx;
+    u32 data_mgmt;
+    u32 rx_pn_drop;
 #ifdef CONFIG_WIRELESS_EXT
     struct list_head scan_list;
 #endif

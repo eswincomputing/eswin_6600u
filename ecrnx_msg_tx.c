@@ -247,13 +247,15 @@ static inline s8_l chan_to_fw_pwr(int power)
 static void cfg80211_to_ecrnx_chan(const struct cfg80211_chan_def *chandef,
                                   struct mac_chan_op *chan)
 {
-    chan->band = chandef->chan->band;
-    chan->type = bw2chnl[chandef->width];
-    chan->prim20_freq = chandef->chan->center_freq;
-    chan->center1_freq = chandef->center_freq1;
-    chan->center2_freq = chandef->center_freq2;
-    chan->flags = get_chan_flags(chandef->chan->flags);
-    chan->tx_power = chan_to_fw_pwr(chandef->chan->max_power);
+    if(chandef && chandef->chan){
+        chan->band = chandef->chan->band;
+        chan->type = bw2chnl[chandef->width];
+        chan->prim20_freq = chandef->chan->center_freq;
+        chan->center1_freq = chandef->center_freq1;
+        chan->center2_freq = chandef->center_freq2;
+        chan->flags = get_chan_flags(chandef->chan->flags);
+        chan->tx_power = chan_to_fw_pwr(chandef->chan->max_power);
+    }
 }
 
 static inline void limit_chan_bw(u8_l *bw, u16_l primary, u16_l *center1)
@@ -322,7 +324,7 @@ static inline void *ecrnx_msg_zalloc(lmac_msg_id_t const id,
         return NULL;
     }
 
-    ecrnx_printk_msg("%s msg:0x%p, param:0x%p \n", __func__, msg, msg->param);
+    ecrnx_printk_msg("%s msg:0x%p, param:0x%p, id:0x%x, src_id:0x%x, dst_id:0x%x \n", __func__, msg, msg->param, id, src_id, dest_id);
     msg->id = id;
     msg->dest_id = dest_id;
     msg->src_id = src_id;
@@ -359,7 +361,7 @@ static int ecrnx_send_msg(struct ecrnx_hw *ecrnx_hw, const void *msg_params,
         reqid != MM_START_CFM && reqid != MM_SET_IDLE_CFM &&
         reqid != ME_CONFIG_CFM && reqid != MM_SET_PS_MODE_CFM &&
         reqid != ME_CHAN_CONFIG_CFM && reqid != MM_SET_GAIN_DELTA_CFM &&
-        reqid != MM_GET_CAL_RESULT_CFM) {
+        reqid != MM_GET_CAL_RESULT_CFM && reqid != MM_SET_MACADRR_CFM) {
         ecrnx_printk_err(KERN_CRIT "%s: bypassing (ECRNX_DEV_RESTARTING set) 0x%02x\n",
                __func__, reqid);
         kfree(msg);
@@ -2460,6 +2462,21 @@ int ecrnx_send_cal_result_get_req(struct ecrnx_hw *ecrnx_hw, void *cfm)
         return -ENOMEM;
 
     return ecrnx_send_msg(ecrnx_hw, void_param, 1, MM_GET_CAL_RESULT_CFM, cfm);
+}
+
+int ecrnx_send_set_macaddr_req(struct ecrnx_hw *ecrnx_hw, u8_l *addr)
+{
+    struct mm_set_macddr_req *param;
+
+    ecrnx_printk_msg(ECRNX_FN_ENTRY_STR);
+    /* calibration result get REQ has no parameter */
+    param = ecrnx_msg_zalloc(MM_SET_MACADRR_REQ, TASK_MM, DRV_TASK_ID, sizeof(struct mm_set_macddr_req));
+    if (!param)
+        return -ENOMEM;
+
+    memcpy(param->addr.array, addr, MAC_ADDR_LEN);
+
+    return ecrnx_send_msg(ecrnx_hw, param, 1, MM_SET_MACADRR_CFM, NULL);
 }
 
 

@@ -1455,6 +1455,7 @@ int ecrnx_handle_tx_datacfm(void *priv, void *host_id)
     /* don't use txq->hwq as it may have changed between push and confirm */
     hwq = &ecrnx_hw->hwq[sw_txhdr->hw_queue];
     ecrnx_txq_confirm_any(ecrnx_hw, txq, hwq, sw_txhdr);
+    trace_skb_confirm(skb, txq, hwq, &txhdr->hw_hdr.cfm);
 
     if (txq->idx != TXQ_INACTIVE) {
 

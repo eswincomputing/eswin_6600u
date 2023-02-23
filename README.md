@@ -94,9 +94,7 @@ Wifi host driver 主要目录结构说明如下表所示；
 
 ​    sdio 版本 host driver ko 加载时，如果需要下载固件的话，则要带下载固件和固件名称的参数（默认不下载固件）， 如下所示：
 
-​    sudo insmod wlan_ecr6600.ko dl_fw=1 fw_name="transport.bin"
-
-
+​    sudo insmod wlan_ecr6600.ko dl_fw=1 fw_name="transport.bin"; 固件使用firmware/ECR6600S_transport.bin
 
 ## **6600U（USB）透传版本编译指令**
 
@@ -106,7 +104,7 @@ Wifi host driver 主要目录结构说明如下表所示；
 
 ​    6600U host ko 加载命令如下所示：
 
-​    sudo insmod wlan_ecr6600u_usb.ko（6600U host ko 加载时默认会下载固件，默认加载固件名称为：ECR6600U_transport.bin，如果不需要固件下载则使用 dl_fw=0， 如果要自定义下载固件名称则使用：fw_name="filename.bin" ）；
+​    sudo insmod wlan_ecr6600u_usb.ko（6600U host ko 加载时默认会下载固件，默认加载固件名称为：ECR6600U_transport.bin，如果不需要固件下载则使用 dl_fw=0， 如果要自定义下载固件名称则使用：fw_name="filename.bin" ）；固件使用firmware/ECR6600U_transport.bin
 
 ## cfg文件使用说明
 
@@ -146,3 +144,4 @@ enum
 FW_LOG_LEVEL=2  //slave log 等级，取值范围为 0-4
 
 FW_LOG_TYPE=0  // slave log 输出方式， 0 为通过 slave 端串口输出；1 为通过 host debugfs 保存； 2 为通过 host 侧文件保存；
+	       // 不依赖debugfs时， 0 为通过 slave 端串口输出 ；1 为只通过 host kernel 打印； 2 为同时在 slave 和 host 打印；

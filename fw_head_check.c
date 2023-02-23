@@ -12,6 +12,7 @@
 
 #include <linux/firmware.h>
 #include <linux/version.h>
+#include <linux/vmalloc.h>
 #include "core.h"
 #include "fw_head_check.h"
 #include "ecrnx_defs.h"

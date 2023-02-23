@@ -39,9 +39,8 @@ int ecrnx_fw_log_level_set(u32 level, u32 dir)
 
     ecrnx_printk_always("%s: fstype:%d, level:%d, dir:%d \n", __func__, dbg_info[0], dbg_info[1], dbg_info[2]);
     ecrnx_printk_always("info_len:%d \n", sizeof(dbg_info));
-    return host_send(dbg_info, sizeof(dbg_info), TX_FLAG_MSG_DEBUGFS_IE);
+    return host_send(dbg_info, sizeof(dbg_info), TX_FLAG_MSG_DEBUG_IE);
 }
-
 #endif
 
 void ecrnx_dbg_mask_dump(u32 mask)
